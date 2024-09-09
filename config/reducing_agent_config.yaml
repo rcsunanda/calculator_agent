@@ -1,0 +1,42 @@
+openai_key_env_var: OPEN_AI_TOKEN_2
+
+#model: gpt-3.5-turbo
+model: gpt-4o
+
+max_llm_calls: 10   # Terminate loop after this many calls
+
+
+system_prompt: |
+  You are a calculator agent. Given a string describing a mathematical expression, 
+  you can determine the next *single* calculation step to be performed in the form of a function call to a calculate function.
+  Each calculate step is specified by two numbers (a, b) and an operation (op).
+  The four valid operations are '+' for addition, '-' for subtraction, '*' for multiplication, '/' for division.
+  The answer to each step will be calculated using a calculate function and given back to you.
+  At each step, output the next *single* function call necessary to calculate the result.
+
+prompt: |
+  This is the mathematical expression to be evaluated: {EXPRESSION}.
+  Perform the calculation step by step, making tool calls to the provided function.
+
+tool_definitions: [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "calculate",
+                        "description": "Perform a calculation step (the operation op on the two operands a, b. 
+                        is_final_step must be set to True for the last operation.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "a": {"type": "number", "description": "First number."},
+                                "b": {"type": "number", "description": "Second number."},
+                                "op": {"type": "string", "enum": ["+", "-", "*", "/"],
+                                       "description": "Operation to perform."},
+                                "is_final_step": {"type": "boolean",
+                                                  "description": "True only if this is the final step of the calculation."},
+                            },
+                            "required": ["a", "b", "op", "is_final_step"],
+                        },
+                    }
+                },
+            ]

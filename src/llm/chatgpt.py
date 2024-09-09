@@ -43,15 +43,15 @@ class ChatGPTClient:
         self.client = openai.OpenAI(api_key=config['api_key'])
 
         self.model = config['model']
-        self.tools = config['tools']
+        self.tool_definitions = config['tool_definitions']
         self.tool_call_required = config['tool_call_required']
 
     def run_prompt(self, msg_history):
         completion = self.client.chat.completions.create(
             model=self.model,
             messages=msg_history.get_messages(),
-            tools=self.tools,
-            tool_choice="required",
+            tools=self.tool_definitions,
+            tool_choice=self.tool_call_required,
         )
 
         response = completion.choices[0].message

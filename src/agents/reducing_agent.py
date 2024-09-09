@@ -1,9 +1,8 @@
-import os
 import json
 import re
 
 from src.tools.calculator import calculate
-from src.llm.chatgpt import ChatGPTClient, MessageHistory
+from src.llm.chatgpt import MessageHistory
 
 
 def float_to_str(f):
@@ -19,57 +18,15 @@ def create_number_pattern(num):
 
 
 class ReducingCalculatorAgent:
-    def __init__(self):
-        api_key = os.environ.get("OPEN_AI_TOKEN_2")
+    def __init__(self, llm_client, config):
+        self.llm_client = llm_client
 
-        llm_config = {
-            'api_key': api_key,
-            'model': 'gpt-4o',  # 'gpt-3.5-turbo'
-            'tool_call_required': True,
-            'tools': [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "calculate",
-                        "description": "Perform a calculation step (the operation op on the two operands a, b. "
-                                       "is_final_step must be set to True for the last operation.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "a": {"type": "number", "description": "First number."},
-                                "b": {"type": "number", "description": "Second number."},
-                                "op": {"type": "string", "enum": ["+", "-", "*", "/"],
-                                       "description": "Operation to perform."},
-                                "is_final_step": {"type": "boolean",
-                                                  "description": "True only if this is the final step of the calculation."},
-                            },
-                            "required": ["a", "b", "op", "is_final_step"],
-                        },
-                    }
-                },
-            ]
-        }
-
-        self.llm_client = ChatGPTClient(llm_config)
-
-        self.system_prompt = "You are a src agent. Given a string describing a mathematical expression, " \
-                             "you can determine the next *single* calculation step to be performed in the form of a function call to a calculate function. " \
-                             "Each calculate step is specified by two numbers (a, b) and an operation (op). " \
-                             "The four valid operations are '+' for addition, '-' for subtraction, '*' for multiplication, '/' for division" \
-                             "The answer to each step will be calculated using a calculate function and given back to you." \
-                             "At each step, output the next *single* function call necessary to calculate the result."
-
-        self.max_calls = 10
+        self.system_prompt = config['system_prompt']
+        self.prompt = config['prompt']
+        self.max_calls = config['max_llm_calls']
 
     def run(self, expression: str):
         print(f"Input expression: {expression}")
-
-        initial_prompt = f'This is the mathematical expression to be evaluated: {expression}. ' \
-                 f'Perform the calculation step by step, making tool calls to the provided function.'
-
-        prompt_msg = MessageHistory()
-        prompt_msg.add_system_message(self.system_prompt)
-        prompt_msg.add_user_message(initial_prompt)
 
         steps = []
         i = 1
@@ -77,7 +34,10 @@ class ReducingCalculatorAgent:
 
         while True:
             print(f'\n ================ iteration {i} ================ \n')
-            # print('\n----- messages -----\n')
+
+            prompt_msg = self._prepare_next_prompt(expression)
+
+            # print('\n----- prompt_msg -----\n')
             # print(prompt_msg)
 
             response = self.llm_client.run_prompt(prompt_msg)
@@ -92,8 +52,6 @@ class ReducingCalculatorAgent:
                 break
 
             steps.extend(call_steps)
-
-            prompt_msg = self._prepare_next_prompt(expression)
 
             if i >= self.max_calls:
                 print(f"Max calls reached: {self.max_calls}")
@@ -144,15 +102,11 @@ class ReducingCalculatorAgent:
         return result, is_final_step, call_steps, expression
 
     def _prepare_next_prompt(self, expression):
-        # next_prompt = "Proceed with the next step of the calculation, in the correct order of operations."
-
-        # steps_so_far = '\n'.join(steps)
-        next_prompt = f'This is the mathematical expression to be evaluated: {expression}. ' \
-                      f'Perform the calculation step by step, making tool calls to the provided function.'
+        prompt = self.prompt.replace('{EXPRESSION}', expression)
 
         prompt_msg = MessageHistory()
         prompt_msg.add_system_message(self.system_prompt)
-        prompt_msg.add_user_message(next_prompt)
+        prompt_msg.add_user_message(prompt)
 
         return prompt_msg
 
