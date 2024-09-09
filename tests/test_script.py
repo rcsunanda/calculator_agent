@@ -1,7 +1,7 @@
-from calculator_agent import CalculatorAgent
+from src.agents.stepwise_agent import StepwiseCalculatorAgent
 
 
-agent = CalculatorAgent()
+agent = StepwiseCalculatorAgent()
 
 # ans = agent.run('10 + 5 * 3')
 

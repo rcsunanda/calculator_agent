@@ -1,7 +1,7 @@
-from calculator_agent_2 import CalculatorAgent2
+from src.agents.reducing_agent import ReducingCalculatorAgent
 
 
-agent = CalculatorAgent2()
+agent = ReducingCalculatorAgent()
 
 # ans = agent.run('10 + 5 * 3')
 

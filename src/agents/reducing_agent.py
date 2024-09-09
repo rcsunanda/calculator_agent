@@ -1,20 +1,30 @@
-from pprint import pprint
-
-import openai
 import os
 import json
+import re
 
-from calculator import calculate
-from chatgpt import ChatGPTClient, MessageHistory
+from src.tools.calculator import calculate
+from src.llm.chatgpt import ChatGPTClient, MessageHistory
 
 
-class CalculatorAgent:
+def float_to_str(f):
+    return f'{f:g}'
+
+
+def create_number_pattern(num):
+    if isinstance(num, int):
+        return r'\b' + str(num) + r'\b'
+    else:
+        # Handle both integer and decimal representations
+        return r'\b' + float_to_str(num).replace('.', r'\.?') + r'\b'
+
+
+class ReducingCalculatorAgent:
     def __init__(self):
         api_key = os.environ.get("OPEN_AI_TOKEN_2")
 
         llm_config = {
             'api_key': api_key,
-            'model': 'gpt-4o',      # 'gpt-3.5-turbo'
+            'model': 'gpt-4o',  # 'gpt-3.5-turbo'
             'tool_call_required': True,
             'tools': [
                 {
@@ -42,7 +52,7 @@ class CalculatorAgent:
 
         self.llm_client = ChatGPTClient(llm_config)
 
-        self.system_prompt = "You are a calculator agent. Given a string describing a mathematical expression, " \
+        self.system_prompt = "You are a src agent. Given a string describing a mathematical expression, " \
                              "you can determine the next *single* calculation step to be performed in the form of a function call to a calculate function. " \
                              "Each calculate step is specified by two numbers (a, b) and an operation (op). " \
                              "The four valid operations are '+' for addition, '-' for subtraction, '*' for multiplication, '/' for division" \
@@ -50,8 +60,6 @@ class CalculatorAgent:
                              "At each step, output the next *single* function call necessary to calculate the result."
 
         self.max_calls = 10
-        self.return_tool_call_msgs = True
-        self.append_messages = False
 
     def run(self, expression: str):
         print(f"Input expression: {expression}")
@@ -70,22 +78,22 @@ class CalculatorAgent:
         while True:
             print(f'\n ================ iteration {i} ================ \n')
             # print('\n----- messages -----\n')
-            # print(messages)
+            # print(prompt_msg)
 
             response = self.llm_client.run_prompt(prompt_msg)
 
-            results, is_final_step, call_steps = self._process_tool_calls(response.tool_calls)
+            result, is_final_step, call_steps, expression = self._process_tool_calls(response.tool_calls, expression)
 
-            print(f"Call {i}: {'    ,   '.join(call_steps)}")
+            print(f"Call {i}: {'    ,   '.join(call_steps)} --> remaining expression: {expression}")
 
             if is_final_step:
-                final_result = results[-1][0]   # Last result --> first element in the tuple
+                final_result = result
                 print(f"Final result: {final_result}")
                 break
 
             steps.extend(call_steps)
 
-            prompt_msg = self._prepare_next_prompt(prompt_msg, expression, steps, results, response)
+            prompt_msg = self._prepare_next_prompt(expression)
 
             if i >= self.max_calls:
                 print(f"Max calls reached: {self.max_calls}")
@@ -98,12 +106,14 @@ class CalculatorAgent:
     def _validate_input(self, input_str):
         pass
 
-    def _process_tool_calls(self, tool_calls):
+    def _process_tool_calls(self, tool_calls, expression):
         if not tool_calls:
             raise ValueError("Error: Expected a function call but received none.")
 
-        results = []
+        function_call_result_message = []
+
         is_final_step = False
+        result = None
         call_steps = []
 
         for tool_call in tool_calls:
@@ -117,37 +127,32 @@ class CalculatorAgent:
 
             result = calculate(a, b, op)
 
+            pattern = create_number_pattern(a) + r'\s*' + re.escape(op) + r'\s*' + create_number_pattern(b)
+            expression = re.sub(pattern, float_to_str(result), expression, count=1)
+
+            # If expression not found before final step --> Error
+
             step = f"{a} {op} {b} = {result}"
             call_steps.append(step)
 
-            results.append((result, tool_call.id))
+            function_call_result_message.append({
+                "role": "tool",
+                "content": json.dumps({"result": result}),
+                "tool_call_id": tool_call.id
+            })
 
-        return results, is_final_step, call_steps
+        return result, is_final_step, call_steps, expression
 
-    def _prepare_next_prompt(self, prompt_msg, expression, steps, results, response):
+    def _prepare_next_prompt(self, expression):
         # next_prompt = "Proceed with the next step of the calculation, in the correct order of operations."
 
-        steps_so_far = '\n'.join(steps)
-        next_prompt = f"Proceed with the next step of the calculation. For reference, the original expression is: \n {expression}. " \
-                      f"And the steps calculated so far are: \n {steps_so_far}."
+        # steps_so_far = '\n'.join(steps)
+        next_prompt = f'This is the mathematical expression to be evaluated: {expression}. ' \
+                      f'Perform the calculation step by step, making tool calls to the provided function.'
 
-        # print(next_prompt)
-
-        # Append messages to the current history
-        if self.append_messages:
-            if self.return_tool_call_msgs:
-                prompt_msg.add_generic_message(response)
-
-                for (result, tool_call_id) in results:
-                    prompt_msg.add_tool_result_message(result, tool_call_id)
-
-            prompt_msg.add_user_message(next_prompt)
-
-        # Fresh message history for the next iteration
-        else:
-            prompt_msg = MessageHistory()
-            prompt_msg.add_system_message(self.system_prompt)
-            prompt_msg.add_user_message(next_prompt)
+        prompt_msg = MessageHistory()
+        prompt_msg.add_system_message(self.system_prompt)
+        prompt_msg.add_user_message(next_prompt)
 
         return prompt_msg
 
