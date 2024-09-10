@@ -5,6 +5,7 @@ model: gpt-4o
 
 max_llm_calls: 10   # Terminate loop after this many calls
 
+max_expression_length: 100
 
 system_prompt: |
   You are a calculator agent. Given a string describing a mathematical expression, 

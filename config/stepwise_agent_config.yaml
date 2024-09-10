@@ -7,6 +7,8 @@ max_llm_calls: 10   # Terminate loop after this many calls
 return_tool_call_msgs: True   # Return messages from tool calls in subsequent prompts
 append_messages: False    # Append messages from tool calls to the prompt (False: fresh prompt each time)
 
+max_expression_length: 100
+
 
 system_prompt: |
   You are a calculator agent. Given a string describing a mathematical expression, 

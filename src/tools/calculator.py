@@ -12,7 +12,7 @@ def calculate(a: Number, b: Number, op: str) -> Number:
         return a * b
     elif op == '/':
         if b == 0:
-            raise ZeroDivisionError('Division by zero is not allowed (b = 0)')
+            raise ZeroDivisionError(f'Division by zero is not allowed. (a = {a}, b = 0)')
         return a / b
     else:
-        raise ValueError(f'Invalid operation: {op}. Supported operations are +, -, *, /.')
+        raise ValueError(f'Unsupported operation: {op}. Supported operations are +, -, *, /.')

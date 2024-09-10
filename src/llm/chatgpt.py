@@ -1,6 +1,6 @@
 import openai
 import json
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Literal
 
 from src.llm.llm_base import LLMClientBase
 
@@ -38,21 +38,31 @@ class MessageHistory:
         return str(self.messages)
 
 
+class ChatGPTError(Exception):
+    """Base class for ChatGPT client errors."""
+    pass
+
+
 class ChatGPTClient(LLMClientBase):
     def __init__(self, config: dict):
         self.client = openai.OpenAI(api_key=config['api_key'])
 
         self.model: str = config['model']
         self.tool_definitions: List[Dict] = config['tool_definitions']
-        self.tool_call_required: str = config['tool_call_required']
+        self.tool_call_required: Literal['none', 'auto', 'required'] = config['tool_call_required']
 
     def run_prompt(self, msg_history: MessageHistory) -> Any:
-        completion = self.client.chat.completions.create(
-            model=self.model,
-            messages=msg_history.get_messages(),
-            tools=self.tool_definitions,
-            tool_choice=self.tool_call_required,
-        )
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=msg_history.get_messages(),
+                tools=self.tool_definitions,
+                tool_choice=self.tool_call_required,
+            )
+        except openai.OpenAIError as e:
+            raise ChatGPTError(f"API error: {str(e)}") from e
+        except Exception as e:
+            raise ChatGPTError(f"Unexpected error: {str(e)}") from e
 
         response = completion.choices[0].message
         return response
