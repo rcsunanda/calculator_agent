@@ -1,15 +1,18 @@
 import json
 import re
+from typing import List, Tuple, Any, Optional, Union
 
+from src.agents.tool_call_result import ToolCallResult
 from src.tools.calculator import calculate
+from src.llm.llm_base import LLMClientBase
 from src.llm.chatgpt import MessageHistory
 
 
-def float_to_str(f):
-    return f'{f:g}'
+def float_to_str(f: float) -> str:
+    return f'{f: g}'
 
 
-def create_number_pattern(num):
+def create_number_pattern(num: Union[int, float]) -> str:
     if isinstance(num, int):
         return r'\b' + str(num) + r'\b'
     else:
@@ -18,19 +21,19 @@ def create_number_pattern(num):
 
 
 class ReducingCalculatorAgent:
-    def __init__(self, llm_client, config):
+    def __init__(self, llm_client: LLMClientBase, config: dict) -> None:
         self.llm_client = llm_client
 
-        self.system_prompt = config['system_prompt']
-        self.prompt = config['prompt']
-        self.max_calls = config['max_llm_calls']
+        self.system_prompt: str = config['system_prompt']
+        self.prompt: str = config['prompt']
+        self.max_calls: int = config['max_llm_calls']
 
-    def run(self, expression: str):
+    def run(self, expression: str) -> Optional[float]:
         print(f"Input expression: {expression}")
 
-        steps = []
+        steps: List[str] = []
+        final_result: Optional[float] = None
         i = 1
-        final_result = None
 
         while True:
             print(f'\n ================ iteration {i} ================ \n')
@@ -42,16 +45,18 @@ class ReducingCalculatorAgent:
 
             response = self.llm_client.run_prompt(prompt_msg)
 
-            result, is_final_step, call_steps, expression = self._process_tool_calls(response.tool_calls, expression)
+            result = self._process_tool_calls(response.tool_calls, expression)
 
-            print(f"Call {i}: {'    ,   '.join(call_steps)} --> remaining expression: {expression}")
+            expression = result.remaining_expression
 
-            if is_final_step:
-                final_result = result
+            print(f"Call {i}: {'    ,   '.join(result.call_steps)} --> remaining expression: {expression}")
+
+            if result.is_final_step:
+                final_result = result.results[-1][0]   # Last result --> first element in the tuple
                 print(f"Final result: {final_result}")
                 break
 
-            steps.extend(call_steps)
+            steps.extend(result.call_steps)
 
             if i >= self.max_calls:
                 print(f"Max calls reached: {self.max_calls}")
@@ -61,18 +66,18 @@ class ReducingCalculatorAgent:
 
         return final_result
 
-    def _validate_input(self, input_str):
-        pass
+    def _validate_expression(self, expression: str) -> bool:
+        return True
 
-    def _process_tool_calls(self, tool_calls, expression):
+    def _process_tool_calls(self, tool_calls: List[Any], expression: str) -> ToolCallResult:
         if not tool_calls:
             raise ValueError("Error: Expected a function call but received none.")
 
         function_call_result_message = []
 
+        results: List[Tuple[float, str]] = []
         is_final_step = False
-        result = None
-        call_steps = []
+        call_steps: List[str] = []
 
         for tool_call in tool_calls:
             function_call = tool_call.function
@@ -93,15 +98,17 @@ class ReducingCalculatorAgent:
             step = f"{a} {op} {b} = {result}"
             call_steps.append(step)
 
+            results.append((result, tool_call.id))
+
             function_call_result_message.append({
                 "role": "tool",
                 "content": json.dumps({"result": result}),
                 "tool_call_id": tool_call.id
             })
 
-        return result, is_final_step, call_steps, expression
+        return ToolCallResult(results, is_final_step, call_steps, expression)
 
-    def _prepare_next_prompt(self, expression):
+    def _prepare_next_prompt(self, expression: str) -> MessageHistory:
         prompt = self.prompt.replace('{EXPRESSION}', expression)
 
         prompt_msg = MessageHistory()

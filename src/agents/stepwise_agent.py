@@ -1,22 +1,25 @@
 import json
+from typing import List, Tuple, Any, Optional
 
+from src.agents.tool_call_result import ToolCallResult
 from src.tools.calculator import calculate
+from src.llm.llm_base import LLMClientBase
 from src.llm.chatgpt import MessageHistory
 
 
 class StepwiseCalculatorAgent:
-    def __init__(self, llm_client, config):
+    def __init__(self, llm_client: LLMClientBase, config: dict) -> None:
         self.llm_client = llm_client
 
-        self.system_prompt = config['system_prompt']
-        self.subsequent_prompt = config['subsequent_prompt']
-        self.initial_prompt = config['initial_prompt']
+        self.system_prompt: str = config['system_prompt']
+        self.subsequent_prompt: str = config['subsequent_prompt']
+        self.initial_prompt: str = config['initial_prompt']
 
-        self.max_calls = config['max_llm_calls']
-        self.return_tool_call_msgs = config['return_tool_call_msgs']
-        self.append_messages = config['append_messages']
+        self.max_calls: int = config['max_llm_calls']
+        self.return_tool_call_msgs: bool = config['return_tool_call_msgs']
+        self.append_messages: bool = config['append_messages']
 
-    def run(self, expression: str):
+    def run(self, expression: str) -> Optional[float]:
         print(f"Input expression: {expression}")
 
         initial_prompt = self.initial_prompt.replace('{EXPRESSION}', expression)
@@ -25,30 +28,30 @@ class StepwiseCalculatorAgent:
         prompt_msg.add_system_message(self.system_prompt)
         prompt_msg.add_user_message(initial_prompt)
 
-        steps = []
+        steps: List[str] = []
+        final_result: Optional[float] = None
         i = 1
-        final_result = None
 
         while True:
             print(f'\n ================ iteration {i} ================ \n')
 
-            print('\n----- prompt_msg -----\n')
-            print(prompt_msg)
+            # print('\n----- prompt_msg -----\n')
+            # print(prompt_msg)
 
             response = self.llm_client.run_prompt(prompt_msg)
 
-            results, is_final_step, call_steps = self._process_tool_calls(response.tool_calls)
+            result = self._process_tool_calls(response.tool_calls)
 
-            print(f"Call {i}: {'    ,   '.join(call_steps)}")
+            print(f"Call {i}: {'    ,   '.join(result.call_steps)}")
 
-            if is_final_step:
-                final_result = results[-1][0]   # Last result --> first element in the tuple
+            if result.is_final_step:
+                final_result = result.results[-1][0]   # Last result --> first element in the tuple
                 print(f"Final result: {final_result}")
                 break
 
-            steps.extend(call_steps)
+            steps.extend(result.call_steps)
 
-            prompt_msg = self._prepare_next_prompt(prompt_msg, expression, steps, results, response)
+            prompt_msg = self._prepare_next_prompt(prompt_msg, expression, steps, result.results, response)
 
             if i >= self.max_calls:
                 print(f"Max calls reached: {self.max_calls}")
@@ -58,16 +61,16 @@ class StepwiseCalculatorAgent:
 
         return final_result
 
-    def _validate_input(self, input_str):
-        pass
+    def _validate_expression(self, expression: str) -> bool:
+        return True
 
-    def _process_tool_calls(self, tool_calls):
+    def _process_tool_calls(self, tool_calls: List[Any]) -> ToolCallResult:
         if not tool_calls:
             raise ValueError("Error: Expected a function call but received none.")
 
-        results = []
+        results: List[Tuple[float, str]] = []
         is_final_step = False
-        call_steps = []
+        call_steps: List[str] = []
 
         for tool_call in tool_calls:
             function_call = tool_call.function
@@ -85,9 +88,10 @@ class StepwiseCalculatorAgent:
 
             results.append((result, tool_call.id))
 
-        return results, is_final_step, call_steps
+        return ToolCallResult(results, is_final_step, call_steps, '')
 
-    def _prepare_next_prompt(self, prompt_msg, expression, steps, results, response):
+    def _prepare_next_prompt(self, prompt_msg: MessageHistory, expression: str, steps: List[str],
+                             results: List[Tuple[float, str]], response: Any) -> MessageHistory:
         # next_prompt = "Proceed with the next step of the calculation, in the correct order of operations."
 
         steps_so_far = '\n'.join(steps)

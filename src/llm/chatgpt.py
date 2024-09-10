@@ -1,33 +1,31 @@
 import openai
 import json
+from typing import List, Dict, Any, Optional, Union
 
 from src.llm.llm_base import LLMClientBase
 
 
 class MessageHistory:
-    def __init__(self, messages=None):
-        if messages is None:
-            messages = []
+    def __init__(self, messages: Optional[List[Any]] = None) -> None:
+        self.messages = messages or []
 
-        self.messages = messages
-
-    def add_system_message(self, content):
+    def add_system_message(self, content: str) -> None:
         self.messages.append({"role": "system", "content": content})
 
-    def add_user_message(self, content):
+    def add_user_message(self, content: str) -> None:
         self.messages.append({"role": "user", "content": content})
 
-    def add_assistant_message(self, content):
+    def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
 
-    def add_tool_result_message(self, result, tool_call_id):
+    def add_tool_result_message(self, result: Union[int, float], tool_call_id: str) -> None:
         self.messages.append({
             "role": "tool",
             "content": json.dumps({"result": result}),
             "tool_call_id": tool_call_id
         })
 
-    def add_generic_message(self, msg):
+    def add_generic_message(self, msg: Any) -> None:
         self.messages.append(msg)
 
     def get_messages(self):
@@ -36,19 +34,19 @@ class MessageHistory:
     # def __str__(self):
     #     return str(self.messages)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.messages)
 
 
 class ChatGPTClient(LLMClientBase):
-    def __init__(self, config):
+    def __init__(self, config: dict):
         self.client = openai.OpenAI(api_key=config['api_key'])
 
-        self.model = config['model']
-        self.tool_definitions = config['tool_definitions']
-        self.tool_call_required = config['tool_call_required']
+        self.model: str = config['model']
+        self.tool_definitions: List[Dict] = config['tool_definitions']
+        self.tool_call_required: str = config['tool_call_required']
 
-    def run_prompt(self, msg_history):
+    def run_prompt(self, msg_history: MessageHistory) -> Any:
         completion = self.client.chat.completions.create(
             model=self.model,
             messages=msg_history.get_messages(),

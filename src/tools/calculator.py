@@ -1,4 +1,9 @@
-def calculate(a, b, op):
+from typing import Union
+
+Number = Union[int, float]
+
+
+def calculate(a: Number, b: Number, op: str) -> Number:
     if op == '+':
         return a + b
     elif op == '-':
