@@ -10,6 +10,13 @@ from src.llm.chatgpt import MessageHistory
 
 
 class StepwiseCalculatorAgent:
+    """
+   Implements a calculator agent by iteratively calling an LLM client with a prompt that contains.
+   1) the full original expression
+   2) the steps of the calculation so far
+   At each call, the LLM will output the function arguments for calculate(a, b, op) to perform the next step
+   When the LLM determines that the final step has been reached, the agent will return the final result.
+   """
     def __init__(self, llm_client: LLMClientBase, config: dict) -> None:
         self.llm_client = llm_client
 
@@ -24,8 +31,15 @@ class StepwiseCalculatorAgent:
         self.append_messages: bool = config['append_messages']
 
     def run(self, expression: str) -> Optional[float]:
+        """
+        Run the stepwise calculation process for the given expression.
+
+        :param expression: The mathematical expression to evaluate
+        :return: The final result of the calculation, or None if not successful
+        """
         print(f"Input expression: {expression}")
 
+        # Invalid expressions will raise an exception
         validate_expression(expression, self.max_expression_length)
 
         initial_prompt = self.initial_prompt.replace('{EXPRESSION}', expression)
@@ -67,6 +81,12 @@ class StepwiseCalculatorAgent:
         return final_result
 
     def _process_tool_calls(self, tool_calls: List[Any]) -> ToolCallResult:
+        """
+        Process the tool calls returned by the LLM and perform the calculations.
+
+        :param tool_calls: A list of tool calls from the LLM response
+        :return: A ToolCallResult object containing the results and step information
+        """
         if not tool_calls:
             raise RuntimeError("Error: Expected a tool call but received none.")
 
@@ -74,6 +94,7 @@ class StepwiseCalculatorAgent:
         is_final_step = False
         call_steps: List[str] = []
 
+        # Handle the potential case of multiple tool calls returned by the LLM
         for tool_call in tool_calls:
             function_call = tool_call.function
 
@@ -97,8 +118,9 @@ class StepwiseCalculatorAgent:
 
     def _prepare_next_prompt(self, prompt_msg: MessageHistory, expression: str, steps: List[str],
                              results: List[Tuple[float, str]], response: Any) -> MessageHistory:
-        # next_prompt = "Proceed with the next step of the calculation, in the correct order of operations."
-
+        """
+        Prepare the prompt for the next iteration of the calculation process. Several variants are possible.
+        """
         steps_so_far = '\n'.join(steps)
         next_prompt = self.subsequent_prompt.replace('{EXPRESSION}', expression)
         next_prompt = next_prompt.replace('{STEPS_SO_FAR}', steps_so_far)

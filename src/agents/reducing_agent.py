@@ -10,6 +10,12 @@ from src.llm.chatgpt import MessageHistory
 
 
 class ReducingCalculatorAgent:
+    """
+   Implements a calculator agent by iteratively calling an LLM client with a prompt that contains.
+   1) a reduced form of the expression (operations replaced by previous results)
+   At each call, the LLM will output the function arguments for calculate(a, b, op) to perform the next step
+   When the LLM determines that the final step has been reached, the agent will return the final result.
+    """
     def __init__(self, llm_client: LLMClientBase, config: dict) -> None:
         self.llm_client = llm_client
 
@@ -20,8 +26,16 @@ class ReducingCalculatorAgent:
         self.max_llm_calls: int = config['max_llm_calls']
 
     def run(self, expression: str) -> Optional[float]:
+        """
+       Run the reducing calculation process for the given expression.
+
+       :param expression: The mathematical expression to evaluate
+       :return: The final result of the calculation, or None if not successful
+       """
+
         print(f"Input expression: {expression}")
 
+        # Invalid expressions will raise an exception
         validate_expression(expression, self.max_expression_length)
 
         steps: List[str] = []
@@ -59,6 +73,13 @@ class ReducingCalculatorAgent:
         return final_result
 
     def _process_tool_calls(self, tool_calls: List[Any], expression: str) -> ToolCallResult:
+        """
+        Process the tool calls returned by the LLM and perform the calculations.
+
+        :param tool_calls: A list of tool calls from the LLM response
+        :param expression: The current expression being evaluated
+        :return: A ToolCallResult object containing the results, step information, and reduced expression
+        """
         if not tool_calls:
             raise RuntimeError("Error: Expected a tool call but received none.")
 
@@ -68,6 +89,7 @@ class ReducingCalculatorAgent:
         is_final_step = False
         call_steps: List[str] = []
 
+        # Handle the potential case of multiple tool calls returned by the LLM
         for tool_call in tool_calls:
             function_call = tool_call.function
 
@@ -100,6 +122,9 @@ class ReducingCalculatorAgent:
         return ToolCallResult(results, is_final_step, call_steps, expression)
 
     def _prepare_next_prompt(self, expression: str) -> MessageHistory:
+        """
+        Prepare the prompt for the next iteration of the calculation process.
+        """
         prompt = self.prompt.replace('{EXPRESSION}', expression)
 
         prompt_msg = MessageHistory()
