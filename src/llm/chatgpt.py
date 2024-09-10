@@ -1,6 +1,8 @@
 import openai
 import json
 
+from src.llm.llm_base import LLMClientBase
+
 
 class MessageHistory:
     def __init__(self, messages=None):
@@ -38,7 +40,7 @@ class MessageHistory:
         return str(self.messages)
 
 
-class ChatGPTClient:
+class ChatGPTClient(LLMClientBase):
     def __init__(self, config):
         self.client = openai.OpenAI(api_key=config['api_key'])
 
